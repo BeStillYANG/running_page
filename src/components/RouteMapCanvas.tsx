@@ -265,7 +265,7 @@ export function RouteMapCanvas({
     if (!containerRef.current || !panelRef.current) return;
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      accessToken: MAPBOX_TOKEN,
+      accessToken: MAPBOX_TOKEN || 'pk.runpage-placeholder',
       language: zh ? 'zh-Hans' : 'en',
       style: { version: 8, sources: {}, layers: [] },
       center: [121.4, 31.2],
