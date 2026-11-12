@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import mapboxgl from 'mapbox-gl';
-import 'mapbox-gl/dist/mapbox-gl.css';
-import * as polyline from '@mapbox/polyline';
-import type { Activity } from '../types';
-import { hasRoute, routeForActivity } from '../core/routeFallback';
-import { MAPBOX_TOKEN } from '../config';
-import { useLocale } from '../hooks/useLocale';
-import './RouteMap.css';
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
+import * as polyline from "@mapbox/polyline";
+import type { Activity } from "../types";
+import { hasRoute, routeForActivity } from "../core/routeFallback";
+import { MAPBOX_TOKEN } from "../config";
+import { useLocale } from "../hooks/useLocale";
+import "./RouteMap.css";
 
 export interface RouteMapProps {
   activities: Activity[];
@@ -16,7 +16,7 @@ export interface RouteMapProps {
   onClearSelection?: () => void;
 }
 
-type BasemapProvider = 'mapbox' | 'amap' | 'carto';
+type BasemapProvider = "mapbox" | "amap" | "carto";
 
 // 高德栅格底图：国内直连、无需 token。其坐标系为 GCJ-02，
 // 所以绘制轨迹时要把 GPS 原始坐标（WGS-84）做一次偏移修正。
@@ -24,18 +24,18 @@ const AMAP_STYLE = {
   version: 8,
   sources: {
     amap: {
-      type: 'raster',
+      type: "raster",
       tiles: [
-        'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-        'https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-        'https://webrd03.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-        'https://webrd04.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        "https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}",
+        "https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}",
+        "https://webrd03.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}",
+        "https://webrd04.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}",
       ],
       tileSize: 256,
-      attribution: '\u00a9 \u9ad8\u5fb7\u5730\u56fe AutoNavi',
+      attribution: "\u00a9 \u9ad8\u5fb7\u5730\u56fe AutoNavi",
     },
   },
-  layers: [{ id: 'amap-base', type: 'raster', source: 'amap' }],
+  layers: [{ id: "amap-base", type: "raster", source: "amap" }],
 };
 
 const GCJ_A = 6378245.0;
@@ -54,8 +54,7 @@ function transformLat(x: number, y: number) {
     0.1 * x * y +
     0.2 * Math.sqrt(Math.abs(x));
   ret +=
-    ((20.0 * Math.sin(6.0 * x * Math.PI) +
-      20.0 * Math.sin(2.0 * x * Math.PI)) *
+    ((20.0 * Math.sin(6.0 * x * Math.PI) + 20.0 * Math.sin(2.0 * x * Math.PI)) *
       2.0) /
     3.0;
   ret +=
@@ -79,8 +78,7 @@ function transformLng(x: number, y: number) {
     0.1 * x * y +
     0.1 * Math.sqrt(Math.abs(x));
   ret +=
-    ((20.0 * Math.sin(6.0 * x * Math.PI) +
-      20.0 * Math.sin(2.0 * x * Math.PI)) *
+    ((20.0 * Math.sin(6.0 * x * Math.PI) + 20.0 * Math.sin(2.0 * x * Math.PI)) *
       2.0) /
     3.0;
   ret +=
@@ -113,9 +111,9 @@ function wgs84ToGcj02(lng: number, lat: number): [number, number] {
 const routeCache = new WeakMap<
   Activity,
   {
-    type: 'Feature';
+    type: "Feature";
     properties: { type: string };
-    geometry: { type: 'LineString'; coordinates: number[][] };
+    geometry: { type: "LineString"; coordinates: number[][] };
   }[]
 >();
 
@@ -127,7 +125,7 @@ export function RouteMapCanvas({
   onClearSelection,
 }: RouteMapProps) {
   const { locale } = useLocale();
-  const zh = locale === 'zh';
+  const zh = locale === "zh";
   const panelRef = useRef<HTMLElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<mapboxgl.Map | null>(null);
@@ -135,26 +133,26 @@ export function RouteMapCanvas({
   const cameraRef = useRef<mapboxgl.CameraOptions | null>(null);
   const fittedRef = useRef<unknown>(null);
   const [provider, setProvider] = useState<BasemapProvider>(
-    MAPBOX_TOKEN ? 'mapbox' : 'amap'
+    MAPBOX_TOKEN ? "mapbox" : "amap",
   );
-  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(
-    'loading'
+  const [status, setStatus] = useState<"loading" | "ready" | "error">(
+    "loading",
   );
   const [retry, setRetry] = useState(0);
   const tileErrorCountRef = useRef(0);
   const style: any =
-    provider === 'mapbox'
-      ? `mapbox://styles/mapbox/${dark === false ? 'light' : 'dark'}-v11`
-      : provider === 'amap'
+    provider === "mapbox"
+      ? `mapbox://styles/mapbox/${dark === false ? "light" : "dark"}-v11`
+      : provider === "amap"
         ? AMAP_STYLE
-        : `https://basemaps.cartocdn.com/gl/${dark === false ? 'positron' : 'dark-matter'}-gl-style/style.json`;
+        : `https://basemaps.cartocdn.com/gl/${dark === false ? "positron" : "dark-matter"}-gl-style/style.json`;
 
   const displayActivity = useMemo(
     () =>
       selectedActivity
         ? routeForActivity(selectedActivity, allActivities)
         : null,
-    [selectedActivity, allActivities]
+    [selectedActivity, allActivities],
   );
   const fallbackActivity =
     selectedActivity && !hasRoute(selectedActivity) ? displayActivity : null;
@@ -178,14 +176,14 @@ export function RouteMapCanvas({
               Number.isFinite(lng) &&
               Number.isFinite(lat) &&
               Math.abs(lng) <= 180 &&
-              Math.abs(lat) <= 90
+              Math.abs(lat) <= 90,
           );
         if (coordinates.length < 2) return [];
         const features = [
           {
-            type: 'Feature' as const,
+            type: "Feature" as const,
             properties: { type: activity.type },
-            geometry: { type: 'LineString' as const, coordinates },
+            geometry: { type: "LineString" as const, coordinates },
           },
         ];
         routeCache.set(activity, features);
@@ -194,13 +192,13 @@ export function RouteMapCanvas({
         return [];
       }
     });
-    if (provider !== 'amap') return features;
+    if (provider !== "amap") return features;
     return features.map((feature) => ({
       ...feature,
       geometry: {
-        type: 'LineString' as const,
+        type: "LineString" as const,
         coordinates: feature.geometry.coordinates.map(([lng, lat]) =>
-          wgs84ToGcj02(lng, lat)
+          wgs84ToGcj02(lng, lat),
         ),
       },
     }));
@@ -221,7 +219,7 @@ export function RouteMapCanvas({
     map.fitBounds(routeBounds, {
       padding: { top: 35, bottom: 35, left: 35, right: 65 },
       maxZoom: selectedActivity ? 16 : 13,
-      duration: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      duration: window.matchMedia("(prefers-reduced-motion: reduce)").matches
         ? 0
         : 500,
     });
@@ -230,32 +228,32 @@ export function RouteMapCanvas({
   const drawRoutes = useCallback(() => {
     const map = mapRef.current;
     if (!map || !styleReadyRef.current) return;
-    const data = { type: 'FeatureCollection' as const, features: routes };
-    const source = map.getSource('routes') as
+    const data = { type: "FeatureCollection" as const, features: routes };
+    const source = map.getSource("routes") as
       mapboxgl.GeoJSONSource | undefined;
     if (source) source.setData(data);
     else {
-      map.addSource('routes', { type: 'geojson', data });
+      map.addSource("routes", { type: "geojson", data });
       map.addLayer({
-        id: 'routes',
-        type: 'line',
-        source: 'routes',
-        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        id: "routes",
+        type: "line",
+        source: "routes",
+        layout: { "line-cap": "round", "line-join": "round" },
         paint: {
-          'line-color': [
-            'match',
-            ['get', 'type'],
-            'Run',
-            '#f97316',
-            'Ride',
-            '#3b82f6',
-            '#4dd2ff',
+          "line-color": [
+            "match",
+            ["get", "type"],
+            "Run",
+            "#f97316",
+            "Ride",
+            "#3b82f6",
+            "#4dd2ff",
           ],
         },
       });
     }
-    map.setPaintProperty('routes', 'line-width', selectedActivity ? 3.5 : 2);
-    map.setPaintProperty('routes', 'line-opacity', selectedActivity ? 1 : 0.7);
+    map.setPaintProperty("routes", "line-width", selectedActivity ? 3.5 : 2);
+    map.setPaintProperty("routes", "line-opacity", selectedActivity ? 1 : 0.7);
     if (fittedRef.current !== routes) {
       fittedRef.current = routes;
       fitRoutes();
@@ -266,33 +264,33 @@ export function RouteMapCanvas({
     if (!containerRef.current || !panelRef.current) return;
     const map = new mapboxgl.Map({
       container: containerRef.current,
-      accessToken: MAPBOX_TOKEN || 'pk.runpage-placeholder',
-      language: zh ? 'zh-Hans' : 'en',
+      accessToken: MAPBOX_TOKEN || "pk.runpage-placeholder",
+      language: zh ? "zh-Hans" : "en",
       style: { version: 8, sources: {}, layers: [] },
       center: [121.4, 31.2],
       zoom: 10,
       ...cameraRef.current,
       locale: zh
         ? {
-            'Map.Title': '跑步路线地图',
-            'NavigationControl.ZoomIn': '放大',
-            'NavigationControl.ZoomOut': '缩小',
-            'NavigationControl.ResetBearing': '恢复朝北',
-            'FullscreenControl.Enter': '全屏查看',
-            'FullscreenControl.Exit': '退出全屏',
-            'AttributionControl.ToggleAttribution': '地图来源',
+            "Map.Title": "跑步路线地图",
+            "NavigationControl.ZoomIn": "放大",
+            "NavigationControl.ZoomOut": "缩小",
+            "NavigationControl.ResetBearing": "恢复朝北",
+            "FullscreenControl.Enter": "全屏查看",
+            "FullscreenControl.Exit": "退出全屏",
+            "AttributionControl.ToggleAttribution": "地图来源",
           }
         : {},
     });
     mapRef.current = map;
-    map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+    map.addControl(new mapboxgl.NavigationControl(), "top-right");
     map.addControl(
       new mapboxgl.FullscreenControl({ container: panelRef.current }),
-      'top-right'
+      "top-right",
     );
     map.addControl(
-      new mapboxgl.ScaleControl({ unit: 'metric', maxWidth: 90 }),
-      'bottom-left'
+      new mapboxgl.ScaleControl({ unit: "metric", maxWidth: 90 }),
+      "bottom-left",
     );
     const observer = new ResizeObserver(() => map.resize());
     observer.observe(containerRef.current);
@@ -316,47 +314,46 @@ export function RouteMapCanvas({
     tileErrorCountRef.current = 0;
     const onError = (event: mapboxgl.ErrorEvent) => {
       const err = event.error as
-        | (Error & { status?: number; url?: string })
-        | undefined;
+        (Error & { status?: number; url?: string }) | undefined;
       const code = err?.status;
-      const url = err?.url || '';
-      if (provider === 'mapbox' && (code === 401 || code === 403)) {
-        setProvider('amap');
+      const url = err?.url || "";
+      if (provider === "mapbox" && (code === 401 || code === 403)) {
+        setProvider("amap");
         return;
       }
       // 占位 token 触发的 Mapbox 遥测/鉴权噪音（events/map-sessions），
       // 与当前底图（高德瓦片）无关，直接忽略，避免误报"底图加载失败"。
-      if (typeof url === 'string' && /mapbox\.(com|cn)/.test(url)) return;
+      if (typeof url === "string" && /mapbox\.(com|cn)/.test(url)) return;
       if (code === 401 || code === 403) return;
-      console.warn('[RouteMap] basemap error', code, url, err?.message);
+      console.warn("[RouteMap] basemap error", code, url, err?.message);
       // 只有持续多次的真实瓦片错误才判定为加载失败
       tileErrorCountRef.current += 1;
       if (tileErrorCountRef.current >= 6) {
         failed = true;
-        setStatus('error');
+        setStatus("error");
       }
     };
     const onIdle = () => {
-      if (!failed) setStatus('ready');
+      if (!failed) setStatus("ready");
     };
-    const onLoading = () => setStatus('loading');
-    map.on('error', onError);
-    map.on('idle', onIdle);
-    map.once('styledataloading', onLoading);
+    const onLoading = () => setStatus("loading");
+    map.on("error", onError);
+    map.on("idle", onIdle);
+    map.once("styledataloading", onLoading);
     styleReadyRef.current = false;
     map.setStyle(style, {
       diff: false,
       localFontFamily: undefined,
-      localIdeographFontFamily: 'sans-serif',
+      localIdeographFontFamily: "sans-serif",
     });
     const timer = window.setTimeout(() => {
-      if (!map.isStyleLoaded()) setStatus('error');
+      if (!map.isStyleLoaded()) setStatus("error");
     }, 15000);
     return () => {
       window.clearTimeout(timer);
-      map.off('error', onError);
-      map.off('idle', onIdle);
-      map.off('styledataloading', onLoading);
+      map.off("error", onError);
+      map.off("idle", onIdle);
+      map.off("styledataloading", onLoading);
     };
   }, [style, provider, retry, zh]);
 
@@ -367,10 +364,10 @@ export function RouteMapCanvas({
       styleReadyRef.current = true;
       drawRoutes();
     };
-    map.on('style.load', onStyleLoad);
+    map.on("style.load", onStyleLoad);
     drawRoutes();
     return () => {
-      map.off('style.load', onStyleLoad);
+      map.off("style.load", onStyleLoad);
     };
   }, [drawRoutes, style, retry, zh]);
 
@@ -388,10 +385,10 @@ export function RouteMapCanvas({
       }
       wasFullscreen = isFullscreen;
     };
-    document.addEventListener('fullscreenchange', onFullscreen);
+    document.addEventListener("fullscreenchange", onFullscreen);
     return () => {
       cancelAnimationFrame(frame);
-      document.removeEventListener('fullscreenchange', onFullscreen);
+      document.removeEventListener("fullscreenchange", onFullscreen);
     };
   }, [fitRoutes]);
 
@@ -399,12 +396,12 @@ export function RouteMapCanvas({
     <section
       ref={panelRef}
       className="route-map"
-      aria-label={zh ? '路线地图' : 'Route map'}
+      aria-label={zh ? "路线地图" : "Route map"}
     >
       <div className="route-map-header">
         <div className="min-w-0">
           <h2 className="text-base font-semibold">
-            {zh ? '路线地图' : 'Route map'}
+            {zh ? "路线地图" : "Route map"}
           </h2>
           <p
             className="truncate text-xs text-[var(--color-muted)]"
@@ -412,22 +409,22 @@ export function RouteMapCanvas({
           >
             {selectedActivity
               ? `${selectedActivity.name} · ${(selectedActivity.distance / 1000).toFixed(1)} km`
-              : `${routes.length.toLocaleString()} ${zh ? '条轨迹' : 'routes'}`}
+              : `${routes.length.toLocaleString()} ${zh ? "条轨迹" : "routes"}`}
           </p>
         </div>
         <div className="flex shrink-0 gap-2">
           {selectedActivity && onClearSelection && (
             <button className="route-map-action" onClick={onClearSelection}>
-              {zh ? '返回总览' : 'Overview'}
+              {zh ? "返回总览" : "Overview"}
             </button>
           )}
           <button
             className="route-map-action"
             disabled={!routes.length}
             onClick={fitRoutes}
-            title={zh ? '将所有当前轨迹完整放入视野' : 'Fit all current routes'}
+            title={zh ? "将所有当前轨迹完整放入视野" : "Fit all current routes"}
           >
-            {zh ? '定位轨迹' : 'Fit routes'}
+            {zh ? "定位轨迹" : "Fit routes"}
           </button>
         </div>
       </div>
@@ -447,49 +444,49 @@ export function RouteMapCanvas({
           <div className="route-map-empty" role="status">
             {zh
               ? selectedActivity
-                ? '这次活动没有 GPS 轨迹'
-                : '当前筛选没有 GPS 轨迹'
-              : 'No GPS route available'}
+                ? "这次活动没有 GPS 轨迹"
+                : "当前筛选没有 GPS 轨迹"
+              : "No GPS route available"}
           </div>
         )}
       </div>
       <div className="route-map-footer">
         <span role="status" aria-live="polite">
-          {status === 'error'
+          {status === "error"
             ? zh
-              ? '底图加载失败，请重试'
-              : 'Basemap failed to load'
-            : status === 'loading'
+              ? "底图加载失败，请重试"
+              : "Basemap failed to load"
+            : status === "loading"
               ? zh
-                ? '正在加载地图…'
-                : 'Loading map…'
-              : provider === 'amap'
+                ? "正在加载地图…"
+                : "Loading map…"
+              : provider === "amap"
                 ? zh
-                  ? '底图 · 高德'
-                  : 'Basemap · AutoNavi'
-                : provider === 'carto'
+                  ? "底图 · 高德"
+                  : "Basemap · AutoNavi"
+                : provider === "carto"
                   ? zh
-                    ? '备用底图 · CARTO'
-                    : 'Alternative basemap · CARTO'
+                    ? "备用底图 · CARTO"
+                    : "Alternative basemap · CARTO"
                   : zh
-                    ? '底图 · Mapbox'
-                    : 'Basemap · Mapbox'}
+                    ? "底图 · Mapbox"
+                    : "Basemap · Mapbox"}
         </span>
-        {(status === 'error' || (provider !== 'mapbox' && !!MAPBOX_TOKEN)) && (
+        {(status === "error" || (provider !== "mapbox" && !!MAPBOX_TOKEN)) && (
           <button
             className="route-map-action"
             onClick={() => {
-              setProvider(MAPBOX_TOKEN ? 'mapbox' : 'amap');
+              setProvider(MAPBOX_TOKEN ? "mapbox" : "amap");
               setRetry((value) => value + 1);
             }}
           >
-            {provider !== 'mapbox' && MAPBOX_TOKEN
+            {provider !== "mapbox" && MAPBOX_TOKEN
               ? zh
-                ? '重试 Mapbox'
-                : 'Retry Mapbox'
+                ? "重试 Mapbox"
+                : "Retry Mapbox"
               : zh
-                ? '重试'
-                : 'Retry'}
+                ? "重试"
+                : "Retry"}
           </button>
         )}
       </div>
