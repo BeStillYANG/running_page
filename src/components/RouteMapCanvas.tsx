@@ -141,6 +141,7 @@ export function RouteMapCanvas({
     'loading'
   );
   const [retry, setRetry] = useState(0);
+  const tileErrorCountRef = useRef(0);
   const style: any =
     provider === 'mapbox'
       ? `mapbox://styles/mapbox/${dark === false ? 'light' : 'dark'}-v11`
@@ -312,11 +313,25 @@ export function RouteMapCanvas({
     const map = mapRef.current;
     if (!map) return;
     let failed = false;
+    tileErrorCountRef.current = 0;
     const onError = (event: mapboxgl.ErrorEvent) => {
-      const code = (event.error as Error & { status?: number }).status;
+      const err = event.error as
+        | (Error & { status?: number; url?: string })
+        | undefined;
+      const code = err?.status;
+      const url = err?.url || '';
       if (provider === 'mapbox' && (code === 401 || code === 403)) {
         setProvider('amap');
-      } else {
+        return;
+      }
+      // 占位 token 触发的 Mapbox 遥测/鉴权噪音（events/map-sessions），
+      // 与当前底图（高德瓦片）无关，直接忽略，避免误报"底图加载失败"。
+      if (typeof url === 'string' && /mapbox\.(com|cn)/.test(url)) return;
+      if (code === 401 || code === 403) return;
+      console.warn('[RouteMap] basemap error', code, url, err?.message);
+      // 只有持续多次的真实瓦片错误才判定为加载失败
+      tileErrorCountRef.current += 1;
+      if (tileErrorCountRef.current >= 6) {
         failed = true;
         setStatus('error');
       }
