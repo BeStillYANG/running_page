@@ -16,6 +16,100 @@ export interface RouteMapProps {
   onClearSelection?: () => void;
 }
 
+type BasemapProvider = 'mapbox' | 'amap' | 'carto';
+
+// 高德栅格底图：国内直连、无需 token。其坐标系为 GCJ-02，
+// 所以绘制轨迹时要把 GPS 原始坐标（WGS-84）做一次偏移修正。
+const AMAP_STYLE = {
+  version: 8,
+  sources: {
+    amap: {
+      type: 'raster',
+      tiles: [
+        'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        'https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        'https://webrd03.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        'https://webrd04.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+      ],
+      tileSize: 256,
+      attribution: '\u00a9 \u9ad8\u5fb7\u5730\u56fe AutoNavi',
+    },
+  },
+  layers: [{ id: 'amap-base', type: 'raster', source: 'amap' }],
+};
+
+const GCJ_A = 6378245.0;
+const GCJ_EE = 0.00669342162296594323;
+
+function outOfChina(lng: number, lat: number) {
+  return lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271;
+}
+
+function transformLat(x: number, y: number) {
+  let ret =
+    -100.0 +
+    2.0 * x +
+    3.0 * y +
+    0.2 * y * y +
+    0.1 * x * y +
+    0.2 * Math.sqrt(Math.abs(x));
+  ret +=
+    ((20.0 * Math.sin(6.0 * x * Math.PI) +
+      20.0 * Math.sin(2.0 * x * Math.PI)) *
+      2.0) /
+    3.0;
+  ret +=
+    ((20.0 * Math.sin(y * Math.PI) + 40.0 * Math.sin((y / 3.0) * Math.PI)) *
+      2.0) /
+    3.0;
+  ret +=
+    ((160.0 * Math.sin((y / 12.0) * Math.PI) +
+      320 * Math.sin((y * Math.PI) / 30.0)) *
+      2.0) /
+    3.0;
+  return ret;
+}
+
+function transformLng(x: number, y: number) {
+  let ret =
+    300.0 +
+    x +
+    2.0 * y +
+    0.1 * x * x +
+    0.1 * x * y +
+    0.1 * Math.sqrt(Math.abs(x));
+  ret +=
+    ((20.0 * Math.sin(6.0 * x * Math.PI) +
+      20.0 * Math.sin(2.0 * x * Math.PI)) *
+      2.0) /
+    3.0;
+  ret +=
+    ((20.0 * Math.sin(x * Math.PI) + 40.0 * Math.sin((x / 3.0) * Math.PI)) *
+      2.0) /
+    3.0;
+  ret +=
+    ((150.0 * Math.sin((x / 12.0) * Math.PI) +
+      300.0 * Math.sin((x / 30.0) * Math.PI)) *
+      2.0) /
+    3.0;
+  return ret;
+}
+
+/** WGS-84（GPS 原始坐标）-> GCJ-02（高德底图坐标） */
+function wgs84ToGcj02(lng: number, lat: number): [number, number] {
+  if (outOfChina(lng, lat)) return [lng, lat];
+  let dLat = transformLat(lng - 105.0, lat - 35.0);
+  let dLng = transformLng(lng - 105.0, lat - 35.0);
+  const radLat = (lat / 180.0) * Math.PI;
+  let magic = Math.sin(radLat);
+  magic = 1 - GCJ_EE * magic * magic;
+  const sqrtMagic = Math.sqrt(magic);
+  dLat =
+    (dLat * 180.0) / (((GCJ_A * (1 - GCJ_EE)) / (magic * sqrtMagic)) * Math.PI);
+  dLng = (dLng * 180.0) / ((GCJ_A / sqrtMagic) * Math.cos(radLat) * Math.PI);
+  return [lng + dLng, lat + dLat];
+}
+
 const routeCache = new WeakMap<
   Activity,
   {
@@ -40,15 +134,19 @@ export function RouteMapCanvas({
   const styleReadyRef = useRef(false);
   const cameraRef = useRef<mapboxgl.CameraOptions | null>(null);
   const fittedRef = useRef<unknown>(null);
-  const [provider, setProvider] = useState(MAPBOX_TOKEN ? 'mapbox' : 'carto');
+  const [provider, setProvider] = useState<BasemapProvider>(
+    MAPBOX_TOKEN ? 'mapbox' : 'amap'
+  );
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>(
     'loading'
   );
   const [retry, setRetry] = useState(0);
-  const style =
+  const style: any =
     provider === 'mapbox'
       ? `mapbox://styles/mapbox/${dark === false ? 'light' : 'dark'}-v11`
-      : `https://basemaps.cartocdn.com/gl/${dark === false ? 'positron' : 'dark-matter'}-gl-style/style.json`;
+      : provider === 'amap'
+        ? AMAP_STYLE
+        : `https://basemaps.cartocdn.com/gl/${dark === false ? 'positron' : 'dark-matter'}-gl-style/style.json`;
 
   const displayActivity = useMemo(
     () =>
@@ -66,7 +164,7 @@ export function RouteMapCanvas({
         ? [displayActivity]
         : []
       : activities;
-    return items.flatMap((activity) => {
+    const features = items.flatMap((activity) => {
       const cached = routeCache.get(activity);
       if (cached) return cached;
       if (!activity.summary_polyline) return [];
@@ -95,7 +193,17 @@ export function RouteMapCanvas({
         return [];
       }
     });
-  }, [activities, selectedActivity, displayActivity]);
+    if (provider !== 'amap') return features;
+    return features.map((feature) => ({
+      ...feature,
+      geometry: {
+        type: 'LineString' as const,
+        coordinates: feature.geometry.coordinates.map(([lng, lat]) =>
+          wgs84ToGcj02(lng, lat)
+        ),
+      },
+    }));
+  }, [activities, selectedActivity, displayActivity, provider]);
 
   const routeBounds = useMemo(() => {
     const bounds = new mapboxgl.LngLatBounds();
@@ -207,7 +315,7 @@ export function RouteMapCanvas({
     const onError = (event: mapboxgl.ErrorEvent) => {
       const code = (event.error as Error & { status?: number }).status;
       if (provider === 'mapbox' && (code === 401 || code === 403)) {
-        setProvider('carto');
+        setProvider('amap');
       } else {
         failed = true;
         setStatus('error');
@@ -340,23 +448,27 @@ export function RouteMapCanvas({
               ? zh
                 ? '正在加载地图…'
                 : 'Loading map…'
-              : provider === 'carto'
+              : provider === 'amap'
                 ? zh
-                  ? '备用底图 · CARTO'
-                  : 'Alternative basemap · CARTO'
-                : zh
-                  ? '底图 · Mapbox'
-                  : 'Basemap · Mapbox'}
+                  ? '底图 · 高德'
+                  : 'Basemap · AutoNavi'
+                : provider === 'carto'
+                  ? zh
+                    ? '备用底图 · CARTO'
+                    : 'Alternative basemap · CARTO'
+                  : zh
+                    ? '底图 · Mapbox'
+                    : 'Basemap · Mapbox'}
         </span>
-        {(status === 'error' || (provider === 'carto' && !!MAPBOX_TOKEN)) && (
+        {(status === 'error' || (provider !== 'mapbox' && !!MAPBOX_TOKEN)) && (
           <button
             className="route-map-action"
             onClick={() => {
-              setProvider(MAPBOX_TOKEN ? 'mapbox' : 'carto');
+              setProvider(MAPBOX_TOKEN ? 'mapbox' : 'amap');
               setRetry((value) => value + 1);
             }}
           >
-            {provider === 'carto' && MAPBOX_TOKEN
+            {provider !== 'mapbox' && MAPBOX_TOKEN
               ? zh
                 ? '重试 Mapbox'
                 : 'Retry Mapbox'
